@@ -32,17 +32,6 @@ The model is trained on annotated desert environment images and evaluated on a n
 
 ---
 
-## 👥 Team Kairo
-
-| Name | Role | GitHub |
-|------|------|--------|
-| **Aditya Raj** | AI Engineering & Model Training | [@your-handle](https://github.com/your-handle) |
-| **Harsh Pal** | AI Engineering & Infrastructure | [@your-handle](https://github.com/your-handle) |
-| **Akshita Singh** | Documentation & Analysis | [@your-handle](https://github.com/your-handle) |
-| **Fuzailur Rahman** | Documentation & Presentation | [@your-handle](https://github.com/your-handle) |
-
----
-
 ## 🏗️ Architecture
 
 ```
