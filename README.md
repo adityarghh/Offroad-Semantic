@@ -25,9 +25,21 @@ The model is trained on annotated desert environment images and evaluated on a n
 
 - **🌵 Synthetic Data Training**: Leverages Duality AI's Falcon digital twin platform for high-quality annotated desert scenes
 - **🔍 Semantic Segmentation**: Pixel-level classification across 10 desert environment classes
+- **🤖 DINOv2 Backbone**: Facebook's self-supervised ViT-S/14 pretrained on 142M images
 - **📊 IoU Evaluation**: Model performance benchmarked using Intersection over Union (IoU) score
 - **⚡ Optimized Inference**: Target inference speed under 50ms per image
 - **📝 Comprehensive Documentation**: Full methodology, failure analysis, and reproducibility guide
+
+---
+
+## 👥 Team Kairo
+
+| Name | Role | GitHub |
+|------|------|--------|
+| **Aditya Raj** | AI Engineering & Model Training | [@your-handle](https://github.com/your-handle) |
+| **Harsh Pal** | AI Engineering & Infrastructure | [@your-handle](https://github.com/your-handle) |
+| **Akshita Singh** | Documentation & Analysis | [@your-handle](https://github.com/your-handle) |
+| **Fuzailur Rahman** | Documentation & Presentation | [@your-handle](https://github.com/your-handle) |
 
 ---
 
@@ -40,21 +52,34 @@ The model is trained on annotated desert environment images and evaluated on a n
 └────────┬────────┘
          │
          ▼
+┌─────────────────────┐
+│  Preprocessing      │
+│  & Augmentation     │
+│  448×448 resize     │
+│  ImageNet normalize │
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│  DINOv2 ViT-S/14        │◄──── Pretrained (142M images)
+│  Backbone               │
+│  embed_dim = 384        │
+│  patch_size = 14        │
+└────────┬────────────────┘
+         │  patch tokens (B, N, 384)
+         ▼
 ┌─────────────────┐
-│  Preprocessing  │
-│  & Augmentation │
+│  MLP Decoder    │
+│  384→256→128→10 │
+│  + BatchNorm    │
+│  + Dropout      │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Segmentation   │◄──── Pretrained Backbone
-│     Model       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Pixel-wise     │
-│  Class Logits   │
+│  Bilinear       │
+│  Upsample       │
+│  → Full Res     │
 └────────┬────────┘
          │
          ▼
@@ -72,15 +97,17 @@ The model is trained on annotated desert environment images and evaluated on a n
 ### Core Functionality
 - **📄 Data Pipeline**: Automated loading and preprocessing for train/val/test splits
 - **🎨 Visualization**: High-contrast color-coded segmentation output
-- **📈 Benchmarking**: IoU score tracking across training runs and model versions
-- **🔁 Checkpointing**: Automatic saving of model weights and training logs to `runs/`
-- **🧪 Failure Analysis**: Tools to identify and document misclassification cases
+- **📈 Benchmarking**: IoU, Dice, and Accuracy tracking across all training epochs
+- **🔁 Checkpointing**: Automatic saving of best model weights by validation IoU
+- **🧪 Failure Analysis**: Side-by-side visualizations to identify misclassification cases
 
 ### Technical Features
+- **Two-Phase Training**: Frozen backbone warmup → full fine-tuning at epoch 5
+- **Mixed Precision**: FP16 via `torch.cuda.amp` for faster training
+- **Cosine LR Scheduling**: Smooth learning rate decay over all epochs
 - **Modular Codebase**: Clean separation between training, evaluation, and visualization
 - **Conda Environment**: Reproducible dependency management via the `EDU` environment
 - **Cross-platform Setup**: Setup scripts for both Windows (`.bat`) and Mac/Linux (`.sh`)
-- **Configurable Hyperparameters**: Easily tune batch size, learning rate, and model selection
 
 ---
 
@@ -89,11 +116,12 @@ The model is trained on annotated desert environment images and evaluated on a n
 | Category | Technology |
 |----------|------------|
 | **Language** | Python 3.8+ |
-| **Deep Learning** | PyTorch |
+| **Deep Learning** | PyTorch 2.0+ |
+| **Backbone** | DINOv2 ViT-S/14 (Facebook Research) |
 | **Environment** | Conda (EDU) |
 | **Data Source** | Duality AI FalconCloud |
-| **Visualization** | Matplotlib / OpenCV |
-| **Experiment Tracking** | Local logs + loss graphs |
+| **Visualization** | Matplotlib / Pillow |
+| **Experiment Tracking** | Local logs + metric graphs |
 
 ---
 
@@ -101,18 +129,18 @@ The model is trained on annotated desert environment images and evaluated on a n
 
 All data is generated from Duality AI's FalconEditor across various desert environment digital twins.
 
-| Class ID | Class Name     | Description |
-|----------|----------------|-------------|
-| 100      | Trees          | Desert trees (e.g. Joshua trees) |
-| 200      | Lush Bushes    | Dense, green shrubbery |
-| 300      | Dry Grass      | Sparse dry grassland |
-| 500      | Dry Bushes     | Dry desert shrubs |
-| 550      | Ground Clutter | Small debris and mixed ground materials |
-| 600      | Flowers        | Desert wildflowers |
-| 700      | Logs           | Fallen logs and branches |
-| 800      | Rocks          | Boulders and rocky terrain |
-| 7100     | Landscape      | General ground (catch-all) |
-| 10000    | Sky            | Sky pixels |
+| Class ID | Class Name     | Model Index | Description |
+|----------|----------------|-------------|-------------|
+| 100      | Trees          | 0 | Desert trees (e.g. Joshua trees) |
+| 200      | Lush Bushes    | 1 | Dense, green shrubbery |
+| 300      | Dry Grass      | 2 | Sparse dry grassland |
+| 500      | Dry Bushes     | 3 | Dry desert shrubs |
+| 550      | Ground Clutter | 4 | Small debris and mixed ground materials |
+| 600      | Flowers        | 5 | Desert wildflowers |
+| 700      | Logs           | 6 | Fallen logs and branches |
+| 800      | Rocks          | 7 | Boulders and rocky terrain |
+| 7100     | Landscape      | 8 | General ground (catch-all) |
+| 10000    | Sky            | 9 | Sky pixels |
 
 ---
 
@@ -125,16 +153,30 @@ offroad-segmentation/
 │   ├── setup_env.bat          # Windows environment setup
 │   └── setup_env.sh           # Mac/Linux environment setup
 │
-├── data/
-│   ├── train/                 # Training RGB + segmented image pairs
-│   ├── val/                   # Validation RGB + segmented image pairs
+├── dataset/
+│   ├── Train/
+│   │   ├── rgb/               # Training RGB images
+│   │   └── seg/               # Training segmentation masks
+│   ├── Val/
+│   │   ├── rgb/               # Validation RGB images
+│   │   └── seg/               # Validation segmentation masks
 │   └── testImages/            # Unseen test images (DO NOT use for training)
 │
-├── runs/                      # Auto-generated: logs, checkpoints, outputs
+├── train_stats/               # Auto-generated after training
+│   ├── training_curves.png    # Train vs Val loss
+│   ├── iou_curves.png         # Validation IoU per epoch
+│   ├── dice_curves.png        # Validation Dice per epoch
+│   ├── all_metrics_curves.png # Combined dashboard
+│   └── evaluation_metrics.txt # Final numeric results
 │
+├── predictions/               # Auto-generated after testing
+│   ├── colorized/             # Color-coded segmentation masks
+│   ├── visualizations/        # Side-by-side comparison images
+│   └── test_results.txt       # Per-image IoU breakdown
+│
+├── segmentation_head.pth      # Trained model weights (best checkpoint)
 ├── train.py                   # Model training script
 ├── test.py                    # Model evaluation & inference script
-├── visualize.py               # Segmentation visualization tool
 ├── requirements.txt           # Python dependencies
 ├── .gitignore
 └── README.md
@@ -148,6 +190,7 @@ offroad-segmentation/
 
 - [Miniconda](https://docs.conda.io/en/latest/miniconda.html) or [Anaconda](https://www.anaconda.com/)
 - A free [Falcon account](https://falcon.duality.ai/auth/sign-up?utm_source=hackathon&utm_medium=instructions&utm_campaign=GHR2)
+- CUDA-capable GPU recommended (CPU training is supported but slow)
 
 ### Installation
 
@@ -174,7 +217,7 @@ offroad-segmentation/
 
 3. **Download the dataset**
 
-   Download from the [Duality AI Hackathon page](https://falcon.duality.ai/secure/documentation/hackathon-segmentation-desert?utm_source=hackathon&utm_medium=instructions&utm_campaign=GHR2) and place the contents into the `data/` folder.
+   Download from the [Duality AI Hackathon page](https://falcon.duality.ai/secure/documentation/hackathon-segmentation-desert?utm_source=hackathon&utm_medium=instructions&utm_campaign=GHR2) and place the contents into the `dataset/` folder following the structure above.
    > Navigate to the **Segmentation Track** section on the dataset page.
 
 4. **Activate the environment**
@@ -190,46 +233,61 @@ offroad-segmentation/
 ```bash
 python train.py
 ```
-Trains the model using images from `data/train/` and `data/val/`. Logs and checkpoints are saved automatically to `runs/`.
+Trains the model using images from `dataset/Train/` and `dataset/Val/`. Best model saved to `segmentation_head.pth`. Graphs and metrics saved to `train_stats/`.
+
+**Custom parameters:**
+```bash
+python train.py --epochs 30 --batch_size 4 --lr 0.0001 --img_size 448
+```
 
 ### Evaluate on Test Images
 ```bash
 python test.py
 ```
-Runs inference on `data/testImages/` — images the model has **never seen** during training. Outputs predictions, loss metrics, and IoU score.
+Runs inference on `dataset/testImages/` — images the model has **never seen** during training. Outputs colorized predictions and visualizations to `predictions/`.
 
-### Visualize Segmentation Output
+**With ground truth IoU evaluation:**
 ```bash
-python visualize.py
+python test.py --seg_dir dataset/Val/seg
 ```
-Generates high-contrast color-coded segmentation overlays for visual inspection and failure analysis.
 
 ---
 
 ## ⚙️ Configuration
 
-Key hyperparameters can be adjusted directly in `train.py`:
+Key hyperparameters in `train.py`:
 
 ```python
-# Data loading
-batch_size = 8            # Reduce if training is too slow
-
-# Training
-num_epochs = 50
-learning_rate = 1e-4
-
-# Model
-model_name = "your_model" # Swap in your architecture of choice
+CONFIG = {
+    "num_epochs":       30,    # Training epochs
+    "batch_size":       4,     # Reduce to 2 if GPU runs out of memory
+    "lr":               1e-4,  # Head learning rate (backbone uses lr * 0.1)
+    "img_size":         448,   # Must be divisible by 14 (DINOv2 patch size)
+    "unfreeze_epoch":   5,     # Epoch to unfreeze backbone for fine-tuning
+}
 ```
 
 ---
 
 ## 📊 Results
 
-| Metric              | Baseline | Best Run |
-|---------------------|----------|----------|
-| Mean IoU Score      | _TBD_    | _TBD_    |
-| Inference Speed     | _TBD_ ms | _TBD_ ms |
+### Baseline (10 Epochs, Frozen Backbone)
+
+| Metric | Value |
+|--------|-------|
+| Val Loss | 0.8163 |
+| **Val IoU** | **0.2921** |
+| Val Dice | 0.4364 |
+| Val Accuracy | 0.7024 |
+
+### Optimized Run (30 Epochs, Full Fine-tuning)
+
+| Metric | Value |
+|--------|-------|
+| Val Loss | _TBD_ |
+| **Val IoU** | _TBD_ |
+| Val Dice | _TBD_ |
+| Val Accuracy | _TBD_ |
 
 > 🎯 **Benchmark targets:** Maximize Mean IoU · Inference speed < 50ms per image
 
@@ -238,70 +296,50 @@ model_name = "your_model" # Swap in your architecture of choice
 ## 🧪 How It Works
 
 ### 1. Data Preparation
-- RGB images and corresponding segmentation masks are loaded from train/val splits
-- Data augmentation is applied to improve generalization across unseen environments
+- RGB images and corresponding segmentation masks loaded from train/val splits
+- Raw class pixel IDs (100, 200, ..., 10000) remapped to contiguous indices 0–9
+- Augmentation applied: random flips, color jitter for generalization
 
-### 2. Model Training
-- The segmentation model is trained to classify every pixel into one of 10 desert classes
-- Training loss and IoU are tracked each epoch and saved to `runs/`
+### 2. Model Training — Two Phase Strategy
+- **Phase 1 (Epochs 1–4):** Backbone frozen, only MLP head trains — prevents catastrophic forgetting
+- **Phase 2 (Epoch 5+):** Full fine-tuning with 10× lower LR — adapts DINOv2 to desert domain
+- Best model checkpoint saved automatically by validation IoU
 
 ### 3. Evaluation
-- `test.py` evaluates the model on the held-out `testImages/` set
-- Predictions, loss metrics, and final IoU score are reported
+- `test.py` runs inference on held-out `testImages/`
+- Outputs per-image predictions, IoU scores, and colorized masks
 
-### 4. Visualization & Analysis
-- `visualize.py` renders high-contrast color maps for easy visual inspection
-- Failure cases (misclassified regions) are documented for iterative improvement
+### 4. Visualization & Failure Analysis
+- Side-by-side RGB + predicted mask + ground truth (when available)
+- Colorized masks using a distinct high-contrast palette per class
+- Failure cases documented in `predictions/visualizations/`
 
 ---
 
-## 📊 Performance Considerations
+## 🐛 Troubleshooting
 
-- **Batch Size**: Reduce if you run into memory issues during training
-- **Augmentation**: Stronger augmentation improves generalization to novel desert environments
-- **Backbone Choice**: Larger backbones improve accuracy but increase inference time
-- **Class Imbalance**: Some classes (e.g. Logs, Flowers) are rare — consider weighted loss functions
+**Training is slow?**
+- Reduce `--batch_size` to 2
+- Reduce `--img_size` to 336 (still divisible by 14)
+- Verify GPU is active: `python -c "import torch; print(torch.cuda.is_available())"`
+
+**CUDA out of memory?**
+- Set `--batch_size 2` and `--img_size 336`
+
+**Segmentation masks not loading?**
+- Ensure mask filenames exactly match RGB image filenames
+- Verify mask pixel values match the class IDs in the table above
 
 ---
 
 ## 🔮 Future Enhancements
 
-### Planned Features
-- [ ] **Multi-environment support**: Generalize across biomes beyond desert terrain
-- [ ] **Conversation / run tracking**: Log and compare multiple training experiments
-- [ ] **Source highlighting**: Visualize exact regions contributing to each prediction
-- [ ] **Local model support**: Run inference without cloud dependencies
-- [ ] **Ensemble methods**: Combine predictions from multiple model architectures
-- [ ] **Multilingual documentation**: Broaden accessibility for international contributors
-
-### Technical Improvements
-- [ ] Docker containerization for easy reproducibility
-- [ ] Unit and integration tests
-- [ ] CI/CD pipeline with GitHub Actions
-- [ ] Automated failure case report generation
-- [ ] Performance monitoring and structured logging
-
----
-
-## 🐛 Known Limitations
-
-- Training data is limited to synthetic desert environments — no real-world images
-- No OCR support; models rely on pixel-level segmentation masks only
-- `setup_env.bat` is Windows-only; Mac/Linux users must use the equivalent `.sh` script
-- Single-environment processing per training run
-- Performance depends on GPU availability
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, open an issue first to discuss what you'd like to change.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+- [ ] Upgrade to DINOv2 ViT-B/14 for stronger features
+- [ ] UPerNet / FPN decoder for multi-scale feature fusion
+- [ ] Class-balanced sampling for rare classes (Logs, Flowers)
+- [ ] Test-Time Augmentation (TTA) for inference boost without retraining
+- [ ] Docker containerization for full reproducibility
+- [ ] Multi-environment generalization beyond desert biomes
 
 ---
 
@@ -311,21 +349,12 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ---
 
-## 👤 Author
-
-**Your Name**
-
-- GitHub: [@your-handle](https://github.com/your-handle)
-- LinkedIn: [Your LinkedIn](https://linkedin.com/in/your-profile)
-
----
-
 ## 🙏 Acknowledgments
 
 - [Duality AI](https://www.duality.ai/) for the FalconCloud digital twin platform and dataset
+- [Facebook Research](https://github.com/facebookresearch/dinov2) for DINOv2
 - [PyTorch](https://pytorch.org/) for the deep learning framework
-- [Anaconda](https://www.anaconda.com/) for environment and dependency management
-- [Facebook Research FAISS](https://github.com/facebookresearch/faiss) for efficient similarity search utilities
+- [Anaconda](https://www.anaconda.com/) for environment management
 
 ---
 
@@ -351,16 +380,19 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ## 📈 Project Status
 
-**Current Version**: 1.0.0  
-**Status**: Active Development  
+**Team**: Kairo
+**Current Version**: 1.0.0
+**Status**: Active Development
 **Last Updated**: February 2026
 
 ---
 
 <div align="center">
 
-### ⭐ Star this repository if you find it helpful!
+### Built by Team Kairo for the Duality AI Offroad Autonomy Segmentation Hackathon
 
-Made with ❤️ for the [Duality AI Offroad Autonomy Segmentation Hackathon](https://www.duality.ai/)
+Made with ❤️ by Aditya Raj · Harsh Pal · Akshita Singh · Fuzailur Rahman
+
+[Duality AI](https://www.duality.ai/) · [Falcon Platform](https://falcon.duality.ai/)
 
 </div>
