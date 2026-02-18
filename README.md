@@ -269,15 +269,6 @@ CONFIG = {
 | Val Dice | 0.4364 |
 | Val Accuracy | 0.7024 |
 
-### Optimized Run (30 Epochs, Full Fine-tuning)
-
-| Metric | Value |
-|--------|-------|
-| Val Loss | _TBD_ |
-| **Val IoU** | _TBD_ |
-| Val Dice | _TBD_ |
-| Val Accuracy | _TBD_ |
-
 > 🎯 **Benchmark targets:** Maximize Mean IoU · Inference speed < 50ms per image
 
 ---
